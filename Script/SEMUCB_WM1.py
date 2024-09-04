@@ -1,4 +1,5 @@
 # Sys modules
+import sys
 import argparse
 import os
 import glob
@@ -12,6 +13,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.basemap import Basemap
 import matplotlib.cm as cm
+from matplotlib.collections import PathCollection
+from matplotlib.path import Path
 
 # Seismology modules
 from obspy import read_events
@@ -21,6 +24,27 @@ from geographiclib.geodesic import Geodesic
 
 # Data modules
 import pandas as pd
+
+
+if_PlotFront = True
+
+# ViewName = 'Hawaii'
+# SearchCenterLat = 15.4
+# SearchCenterLon = -172.3
+
+# ViewName = 'Galapagos'
+# SearchCenterLat = 1
+# SearchCenterLon = -107
+
+# ViewName = 'Iceland'
+# SearchCenterLat = 64.96
+# SearchCenterLon = -19.02
+
+ViewName = 'Alaska'
+SearchCenterLat = 64
+SearchCenterLon = -150
+
+piercedepth = 2800.0
 
 
 # load station info
@@ -47,17 +71,18 @@ dfall = pd.DataFrame(data=StationCatalog)
 df = dfall[dfall['Channel'] == "BHE"]
 
 
+linewidths = 0.2
 def plot_stations(m):
     m.scatter(df['Longitude'].values,df['Latitude'].values, latlon=True,
-        s=10,color='white',marker='^',alpha=1,edgecolors='k', linewidths=0.5,zorder=20)
+        s=10,color='white',marker='v',alpha=1,edgecolors='k', linewidths=linewidths,zorder=20)
         
 def plot_sources(m, ax, plot_rays=True):
     # Define the Sources colormap
     Spectral = cm.get_cmap('Spectral',8).reversed()
     # Plot Sources Beach Ball
     CMTcatList = glob.glob('../Data/CMTSOLUTION/*.CMTSOLUTION')
-    for indexCMT, CMTcatPath in enumerate(CMTcatList):
-        print(f"Plotting {indexCMT}/{len(CMTcatList)} Events!!")
+    for iCMT, CMTcatPath in enumerate(CMTcatList):
+        print(f"Processing {iCMT}/{len(CMTcatList)} Events!")
         CMTcat = read_events(CMTcatPath)
         emagtype = CMTcat[0].magnitudes[0].magnitude_type
         emag = CMTcat[0].magnitudes[0].mag
@@ -75,9 +100,9 @@ def plot_sources(m, ax, plot_rays=True):
         ax.add_collection(beachball)
 
         if plot_rays==True:
-            piercedepth = 2800
-            try:
-                for indexstation, StatInfo in df.iterrows():
+                piercedepth = 2800.0 #note to .X digit for output string match
+            # try:
+                for index, StatInfo in df.iterrows():
                     # print(index)
                     slat, slon = StatInfo['Latitude'], StatInfo['Longitude']
                     EventStationPair = Geodesic.WGS84.Inverse(elat,elon,slat,slon, outmask=1929)
@@ -86,30 +111,30 @@ def plot_sources(m, ax, plot_rays=True):
                     # print("station distance is %.2f" %distdg)
                     if distdg<95 or distdg>140:
                         continue
-                    test=['taup_pierce -mod prem -evt ' +str(elat)+ ' ' +str(elon) + ' -sta '+str(slat) + ' ' + str(slon)+
+                    TEST=['taup_pierce -mod prem -evt ' +str(elat)+ ' ' +str(elon) + ' -sta '+str(slat) + ' ' + str(slon)+
                         ' -h '+str(edepth) +'  -ph Sdiff -Pierce '+str(piercedepth)]
-                    out=subprocess.check_output(test,shell=True,universal_newlines=True)
-                    # print("distdg: ", distdg)
-                    # print(test)
-                    # print(out)
-                    t= out.split()
-                    if len(t)==0:
-                        test=['taup_pierce -mod prem -evt ' +str(elat)+ ' ' +str(elon) + ' -sta '+str(slat) + ' ' + str(slon)+
+                    OUTPUT=subprocess.check_output(TEST,shell=True,universal_newlines=True)
+                    # print("!Check ", "distdg: ", distdg)
+                    # print("!Check ", TEST)
+                    # print("!Check ", OUTPUT)
+                    OUTPUTList=OUTPUT.split()
+                    if len(OUTPUTList)==0:
+                        TEST=['taup_pierce -mod prem -evt ' +str(elat)+ ' ' +str(elon) + ' -sta '+str(slat) + ' ' + str(slon)+
                         ' -h '+str(edepth) +'  -ph S -Pierce '+str(piercedepth)]  
-                        out=subprocess.check_output(test,shell=True,universal_newlines=True)
-                        t= out.split()
-                        if len(t)==0:
-                            print(' Length of taup output is 0 !!')
+                        OUTPUT=subprocess.check_output(TEST,shell=True,universal_newlines=True)
+                        OUTPUTList=OUTPUT.split()
+                        if len(OUTPUTList)==0:
+                            print('Length of taup output is 0 !!')
                             sys.exit()
-                    l=[x for x in range(len(t)) if t[x]==str(piercedepth)]
-                    if len(l) == 0:
+                    l=[x for x in range(len(OUTPUTList)) if OUTPUTList[x]==str(piercedepth)]
+                    if len(l) != 2:
                         # print('Pierece depth at %.1f not found' %piercedepth)
                         continue
                     # Pierepoint Location
-                    pierce1lat = float(t[l[0]+2])
-                    pierce1lon = float(t[l[0]+3])
-                    pierce2lat = float(t[l[1]+2])
-                    pierce2lon = float(t[l[1]+3])
+                    pierce1lat = float(OUTPUTList[l[0]+2])
+                    pierce1lon = float(OUTPUTList[l[0]+3])
+                    pierce2lat = float(OUTPUTList[l[1]+2])
+                    pierce2lon = float(OUTPUTList[l[1]+3])
 
                     event_station = Geodesic.WGS84.Inverse(elat,elon,slat,slon, outmask=1929)
                     event_pierce1 = Geodesic.WGS84.Inverse(elat,elon,pierce1lat,pierce1lon, outmask=1929)
@@ -118,14 +143,15 @@ def plot_sources(m, ax, plot_rays=True):
                     lats = []
                     lons= []
                     for plot_distance in np.linspace(event_pierce1['a12'], event_pierce2['a12'], 20):
-                        trace_location = Geodesic.WGS84.ArcDirect(elat,elon,event_station['azi1'],plot_distance, outmask=1929)
+                        trace_location = Geodesic.WGS84.ArcDirect(elat,elon,event_station['azi1'],plot_distance,outmask=1929)
                         lats.append(trace_location['lat2'])
                         lons.append(trace_location['lon2'])   
 
                     m.plot(lons, lats, latlon=True, 
-                        linestyle='-', alpha=0.1, color=color,zorder=200)
-            except:
-                continue
+                        linestyle='-', alpha=0.01, color=color,zorder=200)
+                    # print("!Check ", lons, lats)
+            # except:
+            #     continue
 
 
 def plot_hotspots(m, base_path = '../Data/', lon360 = False, **kwargs):
@@ -164,15 +190,25 @@ def plot_model(fname, vmin, vmax):
     lat = tmp[:,2].reshape((181,361))
     dvs = tmp[:,3].reshape((181,361))
     # initialize figure and axes
-    fig = plt.figure(figsize=(8,4),dpi=300)
-    ax_map = fig.add_axes([0,0,0.9,1.0])
-    ax_cbr = fig.add_axes([0.91,0.3,0.01,0.4])
+    fig = plt.figure(figsize=(8,6),dpi=300)
+    ax_map = fig.add_axes([0,0,0.85,1.0])
+    ax_cbr = fig.add_axes([0.86,0.3,0.01,0.4])
     # set up map
-    m = Basemap(projection='robin', lon_0=-180, resolution='c', ax=ax_map)
+    # m = Basemap(projection='ortho', lat_0= lon_0=-180, resolution='c', ax=ax_map)
+    if if_PlotFront:
+        m = Basemap(projection='ortho',lat_0=SearchCenterLat,lon_0=SearchCenterLon,resolution='c', ax=ax_map)
+    else:
+        m = Basemap(projection='ortho',lat_0=-1*SearchCenterLat,lon_0=-1*(180-SearchCenterLon),resolution='c', ax=ax_map)
     clip_path = m.drawmapboundary()
-    m.drawcoastlines()
-    # m.drawparallels(np.arange(-90,90,30))
-    # m.drawmeridians(np.arange(-180,180,30))
+    shp_info = m.readshapefile('../Data/ne_10m_coastline/ne_10m_coastline', 'scalerank', drawbounds=True)
+    paths = []
+    for line in shp_info[4]._paths:
+        paths.append(Path(line.vertices, codes=line.codes))
+
+    coll = PathCollection(paths, linewidths=linewidths, facecolors='white', edgecolor='k', zorder=200)
+    m.drawcoastlines(color='white', zorder=0)
+    ax = plt.gca()
+    ax.add_collection(coll)
     # plot the model
     s = m.transform_scalar(dvs, lon[0,:], lat[:,0], 1000, 500)
     im = m.imshow(s, cmap=plt.cm.seismic_r, clip_path=clip_path, vmin=vmin, vmax=vmax)
@@ -188,7 +224,9 @@ def plot_model(fname, vmin, vmax):
     cb.set_label('dlnVs (%)')
     # done
     # plt.show()
+    # plt.savefig("../Figure/OverallRayCoverage_2800km.jpg")
 
 
 plot_model("../Data/BGPlottingData/SEMUCB_WM1_2800km.dat", -10.0, 10.0)
-plt.savefig("../Figure/OverallRayCoverage_2800km.jpg")
+plt.tight_layout()
+plt.savefig(f"../Figure/OverallRayCoverage_2800km_{ViewName}_PlotFront{if_PlotFront}.jpg")
