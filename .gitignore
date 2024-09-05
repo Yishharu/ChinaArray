@@ -5,3 +5,5 @@ Figure/*/*
 Log/*
 Others/*
 .ipynb_checkpoints
+Plot/*
+Script/__pycache__

@@ -1,6 +1,7 @@
-import glob
+from glob import glob
 import subprocess
 import numpy as np
+import os
 
 from obspy.core import Stream
 from obspy import read, read_inventory, read_events
@@ -10,6 +11,7 @@ from obspy.geodetics.base import gps2dist_azimuth
 from obspy.geodetics import kilometers2degrees
 # import obspy
 from obspy.signal.rotate import rotate_ne_rt
+from obspy.taup import TauPyModel
 
 import time
 from multiprocessing import Pool
@@ -31,15 +33,21 @@ with open("../Data/fetch_fdsn_sxd/station.meta", 'r') as f:
         StationCatalog[StationName]['Longitude'] = float(line.split('|')[5])
 
 # for loop through all mseed file
-# for MseedFileName in glob.glob(MseedDataDirectory+'/*.mseed'):
-def ProcessMseed(MseedFileName):
-    DataStream = read(MseedFileName,format='MSEED')
-    EVENTNAME = MseedFileName.split('/')[-1].split('.')[0]
+# for MseedFileName in glob(MseedDataDirectory+'/*.mseed'):
+def ProcessMseed(MseedFilePath):
+    EVENTNAME = MseedFilePath.split('/')[-1].split('.')[0]
+    # if os.path.exists(f"../Data/ProcessedSecondRequest/{EVENTNAME}.PICKLE"):
+    #     print(f"{EVENTNAME} PICKLE exists, skipped!!")
+    #     return
+    DataStream = read(MseedFilePath,format='MSEED')
     print(EVENTNAME)
 
-    CatFind = glob.glob(f"../Data/CMTSOLUTION/{EVENTNAME[0:12]}*.CMTSOLUTION")
+    CatFind = glob(f"../Data/CMTSOLUTION/{EVENTNAME[0:12]}*.CMTSOLUTION")
     if len(CatFind)==1:
         cat = read_events(CatFind[0])
+    elif len(CatFind)>1: 
+        print("Multiple CMTSOLUTION (>1) found!!!")
+        return        
     else:
         print("CMTSOLUTION not found!!!")
         return
@@ -47,6 +55,9 @@ def ProcessMseed(MseedFileName):
     SourceLon = cat[0].origins[0].longitude
     SourceDepth = cat[0].origins[0].depth/1.0e3
 
+
+    #Calculate the takeoff angle of the ray
+    model = TauPyModel('prem')
     # trim DataStream for same length
     DataStream.trim(starttime=DataStream[0].stats.starttime, endtime=DataStream[0].stats.starttime + 2400)
     # calculate baz for rotating
@@ -59,6 +70,13 @@ def ProcessMseed(MseedFileName):
         trace.stats.distance_in_degrees = distance_in_degrees
         trace.stats.azimuth = azimuth
         trace.stats.backazimuth = backazimuth
+
+        # if not hasattr(trace.stats,'traveltimes'):
+        trace.stats.traveltimes=dict()
+        arrivals = model.get_travel_times(source_depth_in_km = SourceDepth, distance_in_degree = distance_in_degrees,
+                                            phase_list = ['Sdiff','S'], receiver_depth_in_km = 0.)
+        for arrival in arrivals:
+            trace.stats.traveltimes[arrival.name]=arrival.time
 
     RTZDataStream = Stream()
 
@@ -117,10 +135,13 @@ def ProcessMseed(MseedFileName):
         seisT=seisN[0].copy()
         seisT.stats['channel']='BHT'
         seisT.data=seisTtmp
+        newseisZ=seisZ[0].copy()
+        newseisZ.stats = seisN[0].stats
+        newseisZ.stats['channel']='BHZ'
         
         RTZDataStream += seisR
         RTZDataStream += seisT
-        RTZDataStream += seisZ[0]
+        RTZDataStream += newseisZ
 
     RTZDataStream.resample(10)
     RTZDataStream.write(f"../Data/ProcessedSecondRequest/{EVENTNAME}.PICKLE",format='PICKLE')
@@ -128,4 +149,4 @@ def ProcessMseed(MseedFileName):
 
 
 with Pool(nproc) as p:
-    p.map(ProcessMseed,glob.glob(MseedDataDirectory+'/*.mseed'))  # Multiprocessing DownloadEvent
+    p.map(ProcessMseed,glob(MseedDataDirectory+'/*.mseed'))  # Multiprocessing DownloadEvent

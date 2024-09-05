@@ -28,9 +28,9 @@ import pandas as pd
 
 if_PlotFront = True
 
-# ViewName = 'Hawaii'
-# SearchCenterLat = 15.4
-# SearchCenterLon = -172.3
+ViewName = 'Hawaii'
+SearchCenterLat = 15.4
+SearchCenterLon = -172.3
 
 # ViewName = 'Galapagos'
 # SearchCenterLat = 1
@@ -40,11 +40,19 @@ if_PlotFront = True
 # SearchCenterLat = 64.96
 # SearchCenterLon = -19.02
 
-ViewName = 'Alaska'
-SearchCenterLat = 64
-SearchCenterLon = -150
+# ViewName = 'Alaska'
+# SearchCenterLat = 64
+# SearchCenterLon = -150
 
-piercedepth = 2800.0
+# ViewName = 'Indonesia'
+# SearchCenterLat = -5
+# SearchCenterLon = 128
+
+# ViewName = 'Reunion'
+# SearchCenterLat = -21.1
+# SearchCenterLon = 55.5
+
+piercedepth = 2840.0
 
 
 # load station info
@@ -229,4 +237,4 @@ def plot_model(fname, vmin, vmax):
 
 plot_model("../Data/BGPlottingData/SEMUCB_WM1_2800km.dat", -10.0, 10.0)
 plt.tight_layout()
-plt.savefig(f"../Figure/OverallRayCoverage_2800km_{ViewName}_PlotFront{if_PlotFront}.jpg")
+plt.savefig(f"../Figure/OverallRayCoverage_{piercedepth}km_{ViewName}_PlotFront{if_PlotFront}.jpg")
