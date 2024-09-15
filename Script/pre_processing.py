@@ -2,6 +2,8 @@ from glob import glob
 import subprocess
 import numpy as np
 import os
+import warnings
+warnings.filterwarnings("ignore")
 
 from obspy.core import Stream
 from obspy import read, read_inventory, read_events
@@ -12,6 +14,8 @@ from obspy.geodetics import kilometers2degrees
 # import obspy
 from obspy.signal.rotate import rotate_ne_rt
 from obspy.taup import TauPyModel
+#Calculate the takeoff angle of the ray
+model = TauPyModel('prem')
 
 import time
 from multiprocessing import Pool
@@ -33,12 +37,12 @@ with open("../Data/fetch_fdsn_sxd/station.meta", 'r') as f:
         StationCatalog[StationName]['Longitude'] = float(line.split('|')[5])
 
 # for loop through all mseed file
-# for MseedFileName in glob(MseedDataDirectory+'/*.mseed'):
+# for MseedFilePath in glob(MseedDataDirectory+'/*.mseed'):
 def ProcessMseed(MseedFilePath):
     EVENTNAME = MseedFilePath.split('/')[-1].split('.')[0]
-    # if os.path.exists(f"../Data/ProcessedSecondRequest/{EVENTNAME}.PICKLE"):
-    #     print(f"{EVENTNAME} PICKLE exists, skipped!!")
-    #     return
+    if os.path.exists(f"../Data/ProcessedSecondRequest/{EVENTNAME}.PICKLE"):
+        print(f"{EVENTNAME} PICKLE exists, skipped!!")
+        return
     DataStream = read(MseedFilePath,format='MSEED')
     print(EVENTNAME)
 
@@ -56,8 +60,6 @@ def ProcessMseed(MseedFilePath):
     SourceDepth = cat[0].origins[0].depth/1.0e3
 
 
-    #Calculate the takeoff angle of the ray
-    model = TauPyModel('prem')
     # trim DataStream for same length
     DataStream.trim(starttime=DataStream[0].stats.starttime, endtime=DataStream[0].stats.starttime + 2400)
     # calculate baz for rotating
@@ -71,7 +73,7 @@ def ProcessMseed(MseedFilePath):
         trace.stats.azimuth = azimuth
         trace.stats.backazimuth = backazimuth
 
-        # if not hasattr(trace.stats,'traveltimes'):
+        # if not hasattr(trace.stats,'traveltimes'): # add traveltime
         trace.stats.traveltimes=dict()
         arrivals = model.get_travel_times(source_depth_in_km = SourceDepth, distance_in_degree = distance_in_degrees,
                                             phase_list = ['Sdiff','S'], receiver_depth_in_km = 0.)
@@ -88,7 +90,7 @@ def ProcessMseed(MseedFilePath):
             print('processed trace exists!!!')
             continue
 
-        print(trace)
+        # print(trace)
         EChannelName = trace.stats.network + "." + trace.stats.station + "." \
                     + trace.stats.location + "." "BHE"
         seisE = DataStream.select(id=EChannelName)
@@ -135,13 +137,16 @@ def ProcessMseed(MseedFilePath):
         seisT=seisN[0].copy()
         seisT.stats['channel']='BHT'
         seisT.data=seisTtmp
-        newseisZ=seisZ[0].copy()
-        newseisZ.stats = seisN[0].stats
-        newseisZ.stats['channel']='BHZ'
+
+        seisZ[0].stats.traveltimes = seisT.stats.traveltimes
+        seisZ[0].stats.distance = seisT.stats.distance
+        seisZ[0].stats.distance_in_degrees = seisT.stats.distance_in_degrees
+        seisZ[0].stats.azimuth = seisT.stats.azimuth
+        seisZ[0].stats.backazimuth = seisT.stats.backazimuth
         
         RTZDataStream += seisR
         RTZDataStream += seisT
-        RTZDataStream += newseisZ
+        RTZDataStream += seisZ[0]
 
     RTZDataStream.resample(10)
     RTZDataStream.write(f"../Data/ProcessedSecondRequest/{EVENTNAME}.PICKLE",format='PICKLE')
